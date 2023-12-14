@@ -46,8 +46,8 @@ void setup() {
   pinMode(LED2, OUTPUT);
   pinMode(LED3, OUTPUT);
   pinMode(PEDAL, OUTPUT);
-  pinMode(DRIVE, INPUT_PULLUP);
-  pinMode(STOP, INPUT_PULLUP);
+  pinMode(DRIVE, INPUT);
+  pinMode(STOP, INPUT);
   pinMode(LIGHT, OUTPUT);
   pinMode(9, OUTPUT);
   pinMode(A1, OUTPUT);
@@ -68,30 +68,16 @@ void setup() {
 
   PCICR |= (1 << PCIE0);
   PCMSK0 |= (1 << PB0);
-  PCMSK1 |= (1 << PC5);
+  PCMSK1 |= (1 << PC5) & (1 << PC0);
 }
 
 void loop() {
   // ULTRASONIC CODE
-  if(driving && ultrasonic.read(INC) < 24)
-  {
+  if (driving && ultrasonic.read(INC) < 30) { //Polling is minimal in this program because all other inputs are consolidated to hardware interrupts.
     digitalWrite(PEDAL, LOW);
     driving = false;
     Flicker(LIGHT, 3, 400);
     delay(4000);
-  }
-
-  // EMERGENCY STOP CODE
-  if (driving && scanRFM() == 'STOP') {
-    digitalWrite(PEDAL, LOW);
-    driving = false;
-    Flicker(LIGHT, 4, 400);
-    Flicker(LIGHT, 1, 1000);
-    delay(10000);
-    while(scanRFM() == 'STOP')
-    {
-      digitalWrite(PEDAL, LOW);
-    }
   }
 }
 
@@ -106,8 +92,7 @@ void Blink(byte PIN, int DELAY_MS) {
 // LED FLICKER
 
 void Flicker(byte PIN, int COUNT, int DURATION_MS) {
-  for (int i = 0; i < COUNT; i++)
-  {
+  for (int i = 0; i < COUNT; i++) {
     digitalWrite(PIN, LOW);
     delay(DURATION_MS);
     digitalWrite(PIN, HIGH);
@@ -115,7 +100,7 @@ void Flicker(byte PIN, int COUNT, int DURATION_MS) {
   }
 }
 
-// SENDING
+// SENDING - From RFM69HCW Examples
 
 void sendRFM(String data) {
   char sendbuffer[62];
@@ -140,9 +125,9 @@ void sendRFM(String data) {
   return;
 }
 
-// RECEIVING
+// RECEIVING - From RFM69HCW Examples
 
-char* scanRFM() { 
+char* scanRFM() {
   if (radio.receiveDone())  // Got one!
   {
     char* data = new char[62];
@@ -169,19 +154,30 @@ char* scanRFM() {
 
 ISR(PCINT0_vect) {
   // DRIVE BUTTON CODE
-  if(!digitalRead(DRIVE))
-  {
-    if(!driving) Flicker(LIGHT, 1, 200);
+  if (!digitalRead(DRIVE)) { //Testing for low state because of pullup resistors
+    if (!driving) Flicker(LIGHT, 1, 200);
     driving = true;
     digitalWrite(PEDAL, HIGH);
   }
 }
 
 ISR(PCINT1_vect) {
-  if(!digitalRead(STOP))
-  {
-    if(driving) Flicker(LIGHT, 1, 200);
+  if (!digitalRead(STOP)) { //Testing for low state because of pullup resistors
+    if (driving) Flicker(LIGHT, 1, 200);
     driving = false;
     digitalWrite(PEDAL, LOW);
+  }
+  if(digitalRead(A0)) { //RFM69HCW board's interrupt line
+  // EMERGENCY STOP CODE
+    if (driving && scanRFM() == 'STOP') {
+      digitalWrite(PEDAL, LOW);
+      driving = false;
+      Flicker(LIGHT, 4, 400);
+      Flicker(LIGHT, 1, 1000);
+      delay(10000);
+      while (scanRFM() == 'STOP') {
+        digitalWrite(PEDAL, LOW);
+      }
+    }
   }
 }
